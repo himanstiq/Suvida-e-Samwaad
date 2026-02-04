@@ -7,9 +7,14 @@ import {
   CheckCircle, XCircle, ChevronRight, Menu, Settings,
   CreditCard, Receipt, Wrench, Plus, Send, Home,
   Globe, Languages, Timer, Bell, Download, Printer,
-  Eye, EyeOff, HelpCircle, Mail, Calendar, Hash
+  Eye, EyeOff, HelpCircle, Mail, Calendar, Hash,
+  PhoneCall, Video, MessageCircle, ThumbsUp, ThumbsDown,
+  Smile, Meh, Frown, BarChart3, Users, Monitor, Activity
 } from 'lucide-react'
 import './index.css'
+
+// Import modular pages
+import { LanguageSelect, LoginPage, HomePage } from './pages'
 
 // Context for app state
 const AppContext = createContext()
@@ -104,11 +109,17 @@ const DEPARTMENTS = [
 ]
 
 function App() {
-  const [language, setLanguage] = useState(null)
-  const [currentPage, setCurrentPage] = useState('language')
+  const [language, setLanguage] = useState(null) // No default - must select
+  const [currentPage, setCurrentPage] = useState('language') // Start with language selection
   const [user, setUser] = useState(null)
   const [sessionTime, setSessionTime] = useState(180) // 3 minutes
   const [showTimeoutWarning, setShowTimeoutWarning] = useState(false)
+  const [pendingAction, setPendingAction] = useState(null) // For lazy auth
+  const [selectedDept, setSelectedDept] = useState(null)
+  const [selectedService, setSelectedService] = useState(null)
+  const [showHelpline, setShowHelpline] = useState(false) // Helpline call modal
+  const [showSurvey, setShowSurvey] = useState(false) // Satisfaction survey modal
+  const [lastCompletedService, setLastCompletedService] = useState(null) // For survey context
 
   // Session timer effect
   useEffect(() => {
@@ -117,10 +128,8 @@ function App() {
     const timer = setInterval(() => {
       setSessionTime(prev => {
         if (prev <= 1) {
-          // Auto logout
-          setUser(null)
-          setCurrentPage('language')
-          sessionStorage.clear()
+          // Auto logout with full session clearing
+          handleSessionEnd()
           return 180
         }
         if (prev === 60) {
@@ -133,6 +142,20 @@ function App() {
     return () => clearInterval(timer)
   }, [user])
 
+  // Complete session data clearing
+  const handleSessionEnd = () => {
+    setUser(null)
+    setCurrentPage('home')
+    setPendingAction(null)
+    setSelectedDept(null)
+    setSelectedService(null)
+    setLastCompletedService(null)
+    setShowSurvey(false)
+    setShowHelpline(false)
+    sessionStorage.clear()
+    localStorage.removeItem('suvidha_temp')
+  }
+
   const resetSession = () => {
     setSessionTime(180)
     setShowTimeoutWarning(false)
@@ -140,7 +163,44 @@ function App() {
 
   const navigate = (page) => {
     setCurrentPage(page)
-    resetSession() // Reset timer on navigation
+    if (user) resetSession()
+  }
+
+  // Handle service selection with lazy auth
+  const handleServiceSelect = (dept, service) => {
+    setSelectedDept(dept)
+    setSelectedService(service)
+    if (user) {
+      navigate('service-form')
+    } else {
+      setPendingAction({ type: 'service', dept, service })
+      navigate('login')
+    }
+  }
+
+  // After login, redirect to pending action
+  const handleLoginSuccess = (userData) => {
+    setUser(userData)
+    if (pendingAction) {
+      if (pendingAction.type === 'service') {
+        setSelectedDept(pendingAction.dept)
+        setSelectedService(pendingAction.service)
+        navigate('service-form')
+      } else if (pendingAction.type === 'complaint') {
+        navigate('complaints')
+      } else if (pendingAction.type === 'status') {
+        navigate('status')
+      }
+      setPendingAction(null)
+    } else {
+      navigate('home')
+    }
+  }
+
+  // Trigger satisfaction survey after service completion
+  const handleServiceComplete = (serviceName) => {
+    setLastCompletedService(serviceName)
+    setShowSurvey(true)
   }
 
   const getText = (key) => t(key, language || 'en')
@@ -148,247 +208,60 @@ function App() {
   const contextValue = {
     language, setLanguage, currentPage, navigate,
     user, setUser, getText, sessionTime, DEPARTMENTS,
-    resetSession, showTimeoutWarning, setShowTimeoutWarning
+    resetSession, showTimeoutWarning, setShowTimeoutWarning,
+    handleServiceSelect, handleLoginSuccess, pendingAction, setPendingAction,
+    selectedDept, setSelectedDept, selectedService, setSelectedService,
+    showHelpline, setShowHelpline, handleSessionEnd, handleServiceComplete
   }
 
   return (
     <AppContext.Provider value={contextValue}>
       <div className="app">
-        {currentPage === 'language' && <LanguageSelect />}
-        {currentPage === 'welcome' && <WelcomeScreen />}
-        {currentPage === 'login' && <LoginScreen />}
+        {currentPage === 'language' && (
+          <LanguageSelect
+            setLanguage={setLanguage}
+            navigate={navigate}
+            LANGUAGES={LANGUAGES}
+          />
+        )}
+        {currentPage === 'home' && (
+          <HomePage
+            language={language}
+            setLanguage={setLanguage}
+            getText={getText}
+            navigate={navigate}
+            DEPARTMENTS={DEPARTMENTS}
+            handleServiceSelect={handleServiceSelect}
+            user={user}
+            setPendingAction={setPendingAction}
+            setShowHelpline={setShowHelpline}
+            LANGUAGES={LANGUAGES}
+          />
+        )}
+        {currentPage === 'login' && (
+          <LoginPage
+            getText={getText}
+            navigate={navigate}
+            handleLoginSuccess={handleLoginSuccess}
+            pendingAction={pendingAction}
+          />
+        )}
         {currentPage === 'dashboard' && <Dashboard />}
-        {currentPage === 'services' && <ServicesScreen />}
         {currentPage === 'complaints' && <ComplaintsScreen />}
         {currentPage === 'status' && <StatusScreen />}
         {currentPage === 'service-form' && <ServiceFormScreen />}
         {currentPage === 'profile' && <ProfileScreen />}
         {currentPage === 'receipt' && <ReceiptScreen />}
-        {user && currentPage !== 'language' && currentPage !== 'welcome' && <SessionBar />}
+        {currentPage === 'admin' && <AdminDashboard />}
+        {user && <SessionBar />}
         {showTimeoutWarning && <TimeoutWarningModal />}
+        {showHelpline && <HelplineModal />}
+        {showSurvey && <SatisfactionSurvey serviceName={lastCompletedService} />}
       </div>
     </AppContext.Provider>
   )
 }
 
-// Language Selection Screen
-function LanguageSelect() {
-  const { setLanguage, navigate } = useApp()
-
-  const handleSelect = (code) => {
-    setLanguage(code)
-    navigate('welcome')
-  }
-
-  return (
-    <div className="screen language-screen">
-      <div className="screen-content">
-        <div className="logo-section animate-fade-in">
-          <div className="logo-icon">
-            <Landmark size={80} strokeWidth={1.5} />
-          </div>
-          <h1 className="logo-text">SUVIDHA</h1>
-          <p className="tagline">Smart Urban Virtual Interactive Digital Helpdesk Assistant</p>
-          <div className="govt-badge">
-            <Shield size={20} />
-            <span>Government of India | C-DAC Initiative</span>
-          </div>
-        </div>
-
-        <div className="language-grid animate-slide-up">
-          <h2>
-            <Languages size={24} style={{ marginRight: '0.5rem', verticalAlign: 'middle' }} />
-            Select Your Language / अपनी भाषा चुनें
-          </h2>
-          <div className="grid grid-cols-3 gap-4">
-            {LANGUAGES.map((lang) => (
-              <button
-                key={lang.code}
-                className="language-btn card card-hover"
-                onClick={() => handleSelect(lang.code)}
-                aria-label={`Select ${lang.name}`}
-              >
-                <Globe size={24} className="lang-icon" />
-                <span className="native">{lang.native}</span>
-                <span className="english">{lang.name}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-      <style>{languageScreenStyles}</style>
-    </div>
-  )
-}
-
-// Welcome Screen
-function WelcomeScreen() {
-  const { getText, navigate, DEPARTMENTS } = useApp()
-
-  return (
-    <div className="screen welcome-screen">
-      <div className="screen-content">
-        <div className="welcome-hero animate-fade-in">
-          <div className="hero-icon">
-            <Landmark size={96} strokeWidth={1.5} />
-          </div>
-          <h1>{getText('welcome')}</h1>
-          <p className="hero-tagline">{getText('tagline')}</p>
-        </div>
-
-        <div className="services-preview animate-slide-up">
-          <div className="preview-grid">
-            {DEPARTMENTS.slice(0, 4).map((dept) => {
-              const Icon = dept.icon
-              return (
-                <div key={dept.id} className="preview-item">
-                  <Icon size={40} style={{ color: dept.color }} />
-                  <span>{getText(dept.id)}</span>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-
-        <button className="btn btn-primary btn-xl" onClick={() => navigate('login')}>
-          {getText('getStarted')}
-          <ArrowRight size={24} />
-        </button>
-      </div>
-      <style>{welcomeScreenStyles}</style>
-    </div>
-  )
-}
-
-// Login Screen
-function LoginScreen() {
-  const { getText, navigate, setUser } = useApp()
-  const [phone, setPhone] = useState('')
-  const [otp, setOTP] = useState('')
-  const [step, setStep] = useState('phone')
-  const [loading, setLoading] = useState(false)
-
-  const handleSendOTP = () => {
-    if (phone.length === 10) {
-      setLoading(true)
-      setTimeout(() => {
-        setLoading(false)
-        setStep('otp')
-      }, 1500)
-    }
-  }
-
-  const handleVerifyOTP = () => {
-    if (otp.length === 6) {
-      setLoading(true)
-      setTimeout(() => {
-        setUser({ phone, name: 'Citizen User' })
-        navigate('dashboard')
-      }, 1000)
-    }
-  }
-
-  return (
-    <div className="screen login-screen">
-      <button className="btn btn-ghost back-btn" onClick={() => navigate('welcome')}>
-        <ArrowLeft size={20} />
-        {getText('back')}
-      </button>
-
-      <div className="screen-content">
-        <div className="login-card card card-glass animate-slide-up">
-          <div className="card-body">
-            <div className="login-header">
-              <Shield size={48} className="text-primary" />
-              <h2>{getText('login')}</h2>
-              <p>Secure OTP Verification</p>
-            </div>
-
-            {step === 'phone' ? (
-              <div className="form-section">
-                <div className="form-group">
-                  <label className="form-label">
-                    <Phone size={18} />
-                    {getText('enterPhone')}
-                  </label>
-                  <div className="phone-input">
-                    <span className="prefix">+91</span>
-                    <input
-                      type="tel"
-                      className="input input-lg"
-                      placeholder="9876543210"
-                      maxLength={10}
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                      aria-label="Mobile number"
-                    />
-                  </div>
-                </div>
-                <button
-                  className="btn btn-primary btn-lg w-full"
-                  onClick={handleSendOTP}
-                  disabled={phone.length !== 10 || loading}
-                >
-                  {loading ? <span className="spinner" /> : (
-                    <>
-                      <Send size={20} />
-                      {getText('sendOTP')}
-                    </>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <div className="form-section">
-                <div className="form-group">
-                  <label className="form-label">
-                    <KeyRound size={18} />
-                    {getText('enterOTP')}
-                  </label>
-                  <div className="otp-inputs">
-                    {[...Array(6)].map((_, i) => (
-                      <input
-                        key={i}
-                        type="text"
-                        className="otp-box"
-                        maxLength={1}
-                        value={otp[i] || ''}
-                        onChange={(e) => {
-                          const val = e.target.value.replace(/\D/g, '')
-                          const newOtp = otp.split('')
-                          newOtp[i] = val
-                          setOTP(newOtp.join(''))
-                          if (val && e.target.nextSibling) e.target.nextSibling.focus()
-                        }}
-                        aria-label={`OTP digit ${i + 1}`}
-                      />
-                    ))}
-                  </div>
-                  <p className="form-hint">
-                    <CheckCircle size={16} className="text-success" />
-                    OTP sent to +91 {phone}
-                  </p>
-                </div>
-                <button
-                  className="btn btn-primary btn-lg w-full"
-                  onClick={handleVerifyOTP}
-                  disabled={otp.length !== 6 || loading}
-                >
-                  {loading ? <span className="spinner" /> : (
-                    <>
-                      <Shield size={20} />
-                      {getText('verifyOTP')}
-                    </>
-                  )}
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-      <style>{loginScreenStyles}</style>
-    </div>
-  )
-}
 
 // Dashboard
 function Dashboard() {
@@ -919,9 +792,9 @@ function ServiceFormScreen() {
   )
 }
 
-// Session Bar
+// Session Bar - Floating corners
 function SessionBar() {
-  const { getText, navigate, setUser, sessionTime, resetSession } = useApp()
+  const { getText, sessionTime, resetSession, handleSessionEnd, setShowHelpline } = useApp()
 
   const formatTime = (seconds) => {
     const mins = Math.floor(seconds / 60)
@@ -929,37 +802,29 @@ function SessionBar() {
     return `${mins}:${secs.toString().padStart(2, '0')}`
   }
 
-  const handleEndSession = () => {
-    setUser(null)
-    navigate('language')
-    sessionStorage.clear()
-  }
-
   const isLow = sessionTime <= 60
 
   return (
-    <div className="session-bar">
-      <div className={`session-timer ${isLow ? 'timer-warning' : ''}`}>
-        <Timer size={20} />
-        <span>Session: {formatTime(sessionTime)}</span>
-      </div>
-      <div className="session-actions">
-        <button className="btn btn-ghost btn-sm" onClick={resetSession} title="Extend Session">
-          <Clock size={18} />
-        </button>
-        <button className="btn btn-ghost btn-sm">
-          <Bell size={18} />
-        </button>
-        <button className="btn btn-ghost btn-sm">
-          <Settings size={18} />
-        </button>
-        <button className="btn btn-danger" onClick={handleEndSession}>
+    <>
+      {/* Top floating elements */}
+      <div className="session-bar">
+        <div className={`session-timer ${isLow ? 'timer-warning' : ''}`} onClick={resetSession} title="Click to extend session">
+          <Timer size={18} />
+          <span>{formatTime(sessionTime)}</span>
+        </div>
+        <button className="session-end-btn" onClick={handleSessionEnd}>
           <LogOut size={18} />
-          {getText('logout')}
+          <span>{getText('logout')}</span>
         </button>
       </div>
+
+      {/* Helpline FAB - Bottom Right */}
+      <button className="chatbot-fab" title="Call for Assistance" onClick={() => setShowHelpline(true)}>
+        <PhoneCall size={24} />
+      </button>
+
       <style>{sessionBarStyles}</style>
-    </div>
+    </>
   )
 }
 
@@ -1185,6 +1050,278 @@ function TimeoutWarningModal() {
   )
 }
 
+// Helpline Call Modal
+function HelplineModal() {
+  const { setShowHelpline, getText, selectedDept } = useApp()
+  const [callState, setCallState] = useState('idle') // idle, connecting, connected
+  const [callDuration, setCallDuration] = useState(0)
+
+  const contacts = [
+    { id: 'general', name: 'General Helpdesk', number: '1800-123-4567', icon: Phone },
+    { id: 'electricity', name: 'Electricity Dept', number: '1800-123-4568', icon: Zap },
+    { id: 'water', name: 'Water Supply', number: '1800-123-4569', icon: Droplets },
+    { id: 'municipal', name: 'Municipal Office', number: '1800-123-4570', icon: Building2 },
+  ]
+
+  useEffect(() => {
+    if (callState === 'connected') {
+      const timer = setInterval(() => setCallDuration(d => d + 1), 1000)
+      return () => clearInterval(timer)
+    }
+  }, [callState])
+
+  const handleCall = (contact) => {
+    setCallState('connecting')
+    setTimeout(() => setCallState('connected'), 2000)
+  }
+
+  const formatDuration = (secs) => {
+    const mins = Math.floor(secs / 60)
+    const s = secs % 60
+    return `${mins.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal helpline-modal animate-slide-up">
+        <button className="modal-close" onClick={() => setShowHelpline(false)}>
+          <XCircle size={24} />
+        </button>
+
+        {callState === 'idle' && (
+          <div className="card-body">
+            <div className="helpline-header">
+              <PhoneCall size={48} className="text-primary" />
+              <h2>Call Helpline</h2>
+              <p className="text-muted">Select a department to connect with support</p>
+            </div>
+
+            <div className="contact-list">
+              {contacts.map(contact => {
+                const Icon = contact.icon
+                return (
+                  <button key={contact.id} className="contact-item" onClick={() => handleCall(contact)}>
+                    <div className="contact-icon">
+                      <Icon size={24} />
+                    </div>
+                    <div className="contact-info">
+                      <span className="contact-name">{contact.name}</span>
+                      <span className="contact-number">{contact.number}</span>
+                    </div>
+                    <PhoneCall size={20} className="call-icon" />
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {callState === 'connecting' && (
+          <div className="card-body text-center">
+            <div className="connecting-animation">
+              <PhoneCall size={64} className="pulse" />
+            </div>
+            <h2>Connecting...</h2>
+            <p className="text-muted">Please wait while we connect you</p>
+          </div>
+        )}
+
+        {callState === 'connected' && (
+          <div className="card-body text-center">
+            <div className="call-active">
+              <User size={64} />
+            </div>
+            <h2>Connected</h2>
+            <p className="call-timer">{formatDuration(callDuration)}</p>
+            <div className="call-controls">
+              <button className="btn btn-danger btn-lg" onClick={() => { setCallState('idle'); setCallDuration(0); }}>
+                <Phone size={20} style={{ transform: 'rotate(135deg)' }} />
+                End Call
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+      <style>{helplineStyles}</style>
+    </div>
+  )
+}
+
+// Satisfaction Survey Modal
+function SatisfactionSurvey({ serviceName }) {
+  const { setShowSurvey, navigate, getText } = useApp()
+  const [rating, setRating] = useState(null)
+  const [feedback, setFeedback] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  const ratings = [
+    { value: 'poor', icon: Frown, label: 'Poor', color: '#ef4444' },
+    { value: 'okay', icon: Meh, label: 'Okay', color: '#f59e0b' },
+    { value: 'good', icon: Smile, label: 'Good', color: '#22c55e' },
+  ]
+
+  const handleSubmit = () => {
+    // In real app, send to backend
+    console.log('Survey submitted:', { serviceName, rating, feedback })
+    setSubmitted(true)
+    setTimeout(() => {
+      setShowSurvey(false)
+      navigate('home')
+    }, 2000)
+  }
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal survey-modal animate-slide-up">
+        {!submitted ? (
+          <div className="card-body">
+            <div className="survey-header">
+              <Star size={48} className="text-primary" />
+              <h2>How was your experience?</h2>
+              {serviceName && <p className="text-muted">Service: {serviceName}</p>}
+            </div>
+
+            <div className="rating-options">
+              {ratings.map(r => {
+                const Icon = r.icon
+                return (
+                  <button
+                    key={r.value}
+                    className={`rating-btn ${rating === r.value ? 'selected' : ''}`}
+                    onClick={() => setRating(r.value)}
+                    style={{ '--rating-color': r.color }}
+                  >
+                    <Icon size={48} />
+                    <span>{r.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="feedback-section">
+              <label>Additional feedback (optional)</label>
+              <textarea
+                placeholder="Tell us more about your experience..."
+                value={feedback}
+                onChange={(e) => setFeedback(e.target.value)}
+                rows={3}
+              />
+            </div>
+
+            <div className="survey-actions">
+              <button className="btn btn-secondary" onClick={() => setShowSurvey(false)}>
+                Skip
+              </button>
+              <button className="btn btn-primary" onClick={handleSubmit} disabled={!rating}>
+                Submit Feedback
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="card-body text-center">
+            <CheckCircle size={64} className="text-success" />
+            <h2>Thank You!</h2>
+            <p className="text-muted">Your feedback helps us improve our services</p>
+          </div>
+        )}
+      </div>
+      <style>{surveyStyles}</style>
+    </div>
+  )
+}
+
+// Admin Dashboard (Fleet Management Mockup)
+function AdminDashboard() {
+  const { navigate } = useApp()
+
+  const kioskStats = [
+    { label: 'Total Kiosks', value: 24, icon: Monitor, color: '#3b82f6' },
+    { label: 'Online', value: 22, icon: Activity, color: '#22c55e' },
+    { label: 'Offline', value: 2, icon: AlertCircle, color: '#ef4444' },
+    { label: 'Active Users', value: 156, icon: Users, color: '#8b5cf6' },
+  ]
+
+  const kiosks = [
+    { id: 'K001', location: 'City Hall - Main Lobby', status: 'online', sessions: 45, uptime: '99.9%' },
+    { id: 'K002', location: 'Municipal Office Block A', status: 'online', sessions: 32, uptime: '99.7%' },
+    { id: 'K003', location: 'Community Center', status: 'online', sessions: 28, uptime: '98.5%' },
+    { id: 'K004', location: 'Bus Station Terminal', status: 'offline', sessions: 0, uptime: '85.2%' },
+    { id: 'K005', location: 'Market Area', status: 'online', sessions: 67, uptime: '99.8%' },
+  ]
+
+  return (
+    <div className="screen admin-screen">
+      <header className="admin-header">
+        <button className="btn btn-ghost" onClick={() => navigate('home')}>
+          <ArrowLeft size={20} />
+          Back
+        </button>
+        <h1><BarChart3 size={28} /> Admin Dashboard</h1>
+        <div className="admin-actions">
+          <button className="btn btn-secondary"><Settings size={18} /> Settings</button>
+        </div>
+      </header>
+
+      <div className="screen-content">
+        {/* Stats Grid */}
+        <div className="stats-grid animate-fade-in">
+          {kioskStats.map(stat => {
+            const Icon = stat.icon
+            return (
+              <div key={stat.label} className="stat-card card" style={{ '--stat-color': stat.color }}>
+                <Icon size={32} style={{ color: stat.color }} />
+                <div className="stat-value">{stat.value}</div>
+                <div className="stat-label">{stat.label}</div>
+              </div>
+            )
+          })}
+        </div>
+
+        {/* Kiosk List */}
+        <div className="kiosk-table-section animate-slide-up">
+          <h3><Monitor size={20} /> Kiosk Fleet Status</h3>
+          <table className="kiosk-table">
+            <thead>
+              <tr>
+                <th>Kiosk ID</th>
+                <th>Location</th>
+                <th>Status</th>
+                <th>Today's Sessions</th>
+                <th>Uptime</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {kiosks.map(kiosk => (
+                <tr key={kiosk.id}>
+                  <td className="kiosk-id">{kiosk.id}</td>
+                  <td>{kiosk.location}</td>
+                  <td>
+                    <span className={`status-badge ${kiosk.status}`}>
+                      {kiosk.status === 'online' ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                      {kiosk.status}
+                    </span>
+                  </td>
+                  <td>{kiosk.sessions}</td>
+                  <td>{kiosk.uptime}</td>
+                  <td>
+                    <div className="action-btns">
+                      <button className="btn-icon" title="Screenshot"><Camera size={16} /></button>
+                      <button className="btn-icon" title="Restart"><Settings size={16} /></button>
+                      <button className="btn-icon" title="View Logs"><FileText size={16} /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <style>{adminStyles}</style>
+    </div>
+  )
+}
+
 // Styles
 const languageScreenStyles = `
   .language-screen { background: linear-gradient(135deg, #1e3a8a 0%, #1e40af 50%, #1d4ed8 100%); }
@@ -1226,6 +1363,56 @@ const loginScreenStyles = `
   .otp-box:focus { border-color: var(--primary-500); outline: none; }
   .form-label { display: flex; align-items: center; gap: 0.5rem; }
   .form-hint { display: flex; align-items: center; gap: 0.5rem; }
+  .login-context { position: absolute; top: 5rem; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.9); padding: 0.75rem 1.5rem; border-radius: var(--radius-lg); font-weight: 500; color: var(--gray-700); }
+`
+
+const homePageStyles = `
+  .home-screen { background: linear-gradient(180deg, #f8fafc 0%, #e2e8f0 100%); min-height: 100vh; }
+  .home-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: white; box-shadow: var(--shadow-sm); position: sticky; top: 0; z-index: 50; }
+  .brand { display: flex; align-items: center; gap: 1rem; }
+  .brand-icon { color: var(--primary-500); }
+  .brand h1 { font-size: 1.5rem; color: var(--primary-700); margin: 0; line-height: 1; }
+  .brand-tagline { font-size: 0.75rem; color: var(--gray-500); display: block; max-width: 200px; line-height: 1.3; }
+  .header-actions { display: flex; align-items: center; gap: 1rem; }
+  
+  .lang-dropdown { position: relative; }
+  .lang-btn { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: var(--gray-100); border: none; border-radius: var(--radius-lg); cursor: pointer; font-family: inherit; font-weight: 500; }
+  .lang-btn:hover { background: var(--gray-200); }
+  .lang-menu { position: absolute; top: 100%; right: 0; margin-top: 0.5rem; background: white; border-radius: var(--radius-lg); box-shadow: var(--shadow-lg); overflow: hidden; min-width: 150px; z-index: 100; }
+  .lang-option { display: block; width: 100%; padding: 0.75rem 1rem; border: none; background: none; text-align: left; cursor: pointer; font-family: inherit; }
+  .lang-option:hover { background: var(--gray-50); }
+  .lang-option.active { background: var(--primary-50); color: var(--primary-600); font-weight: 600; }
+  
+  .home-content { padding: 2rem; max-width: 1200px; margin: 0 auto; }
+  .home-hero { text-align: center; margin-bottom: 2rem; }
+  .home-hero h2 { font-size: 2rem; color: var(--gray-800); margin-bottom: 0.5rem; }
+  .home-hero p { color: var(--gray-500); font-size: 1.1rem; }
+  
+  .dept-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+  .dept-card { background: white; border-radius: var(--radius-xl); box-shadow: var(--shadow-sm); overflow: hidden; transition: all 0.3s; }
+  .dept-card.expanded { box-shadow: var(--shadow-lg); }
+  .dept-header { display: flex; align-items: center; gap: 1rem; padding: 1.25rem 1.5rem; width: 100%; border: none; background: none; cursor: pointer; font-family: inherit; text-align: left; border-left: 4px solid var(--dept-color); }
+  .dept-header:hover { background: var(--gray-50); }
+  .dept-name { flex: 1; font-size: 1.1rem; font-weight: 600; color: var(--gray-800); }
+  .expand-icon { color: var(--gray-400); transition: transform 0.3s; }
+  .expand-icon.rotated { transform: rotate(90deg); }
+  
+  .service-list { border-top: 1px solid var(--gray-100); padding: 0.5rem; background: var(--gray-50); }
+  .service-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.875rem 1rem; width: 100%; border: none; background: white; border-radius: var(--radius-lg); cursor: pointer; font-family: inherit; margin-bottom: 0.5rem; transition: all 0.2s; }
+  .service-item:last-child { margin-bottom: 0; }
+  .service-item:hover { background: var(--primary-50); transform: translateX(4px); }
+  .service-item span { flex: 1; text-align: left; font-weight: 500; color: var(--gray-700); }
+  .service-item .arrow { color: var(--gray-300); transition: color 0.2s; }
+  .service-item:hover .arrow { color: var(--primary-500); }
+  
+  .quick-actions-bar { display: flex; gap: 1rem; justify-content: center; margin-bottom: 2rem; }
+  .quick-action-btn { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius-xl); cursor: pointer; font-family: inherit; font-weight: 500; transition: all 0.2s; }
+  .quick-action-btn:hover { background: var(--gray-50); border-color: var(--gray-300); box-shadow: var(--shadow-sm); }
+  
+  .govt-footer { text-align: center; color: var(--gray-400); font-size: 0.85rem; display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 1rem; }
+  
+  .chatbot-fab { position: fixed; bottom: 1.5rem; right: 1.5rem; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-lg), 0 0 20px rgba(59, 130, 246, 0.3); transition: all 0.3s; z-index: 100; }
+  .chatbot-fab:hover { transform: scale(1.1); box-shadow: var(--shadow-xl), 0 0 30px rgba(59, 130, 246, 0.5); }
 `
 
 const dashboardStyles = `
@@ -1304,11 +1491,15 @@ const serviceFormStyles = `
 `
 
 const sessionBarStyles = `
-  .session-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); border-top: 1px solid var(--gray-200); z-index: 100; }
-  .session-timer { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; color: var(--gray-600); padding: 0.5rem 1rem; border-radius: var(--radius-lg); transition: all 0.3s; }
+  .session-bar { position: fixed; top: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: flex-start; padding: 1rem 1.5rem; z-index: 100; pointer-events: none; }
+  .session-timer { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; color: var(--gray-700); padding: 0.75rem 1.25rem; border-radius: var(--radius-xl); background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); box-shadow: var(--shadow-md); pointer-events: auto; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; border: none; }
+  .session-timer:hover { background: white; box-shadow: var(--shadow-lg); }
   .session-timer.timer-warning { background: var(--error-50); color: var(--error-600); animation: pulse 1s ease-in-out infinite; }
-  .session-actions { display: flex; align-items: center; gap: 0.5rem; }
-  .btn-sm { min-height: 40px; min-width: 40px; padding: 0.5rem; }
+  .session-end-btn { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; color: var(--error-600); padding: 0.75rem 1.25rem; border-radius: var(--radius-xl); background: rgba(255,255,255,0.95); backdrop-filter: blur(10px); box-shadow: var(--shadow-md); pointer-events: auto; font-size: 0.95rem; cursor: pointer; transition: all 0.2s; border: none; font-family: inherit; }
+  .session-end-btn:hover { background: var(--error-500); color: white; box-shadow: var(--shadow-lg); }
+  .chatbot-fab { position: fixed; bottom: 1.5rem; right: 1.5rem; width: 60px; height: 60px; border-radius: 50%; background: linear-gradient(135deg, var(--primary-500), var(--primary-600)); color: white; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; box-shadow: var(--shadow-lg), 0 0 20px rgba(59, 130, 246, 0.3); transition: all 0.3s; z-index: 100; }
+  .chatbot-fab:hover { transform: scale(1.1); box-shadow: var(--shadow-xl), 0 0 30px rgba(59, 130, 246, 0.5); }
+  .chatbot-fab:active { transform: scale(0.95); }
 `
 
 const profileStyles = `
@@ -1342,6 +1533,67 @@ const receiptStyles = `
   .receipt-footer { display: flex; justify-content: space-between; align-items: center; margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--gray-100); }
   .receipt-date { display: flex; align-items: center; gap: 0.5rem; font-size: 0.9rem; color: var(--gray-500); }
   .receipt-actions { display: flex; gap: 0.5rem; }
+`
+
+const helplineStyles = `
+  .helpline-modal { max-width: 500px; width: 90%; }
+  .modal-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; cursor: pointer; color: var(--gray-400); }
+  .modal-close:hover { color: var(--gray-600); }
+  .helpline-header { text-align: center; margin-bottom: 1.5rem; }
+  .helpline-header h2 { margin-top: 1rem; }
+  .contact-list { display: flex; flex-direction: column; gap: 0.75rem; }
+  .contact-item { display: flex; align-items: center; gap: 1rem; padding: 1rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: var(--radius-lg); cursor: pointer; transition: all 0.2s; }
+  .contact-item:hover { background: var(--primary-50); border-color: var(--primary-300); }
+  .contact-icon { width: 48px; height: 48px; border-radius: 50%; background: white; display: flex; align-items: center; justify-content: center; color: var(--primary-500); }
+  .contact-info { flex: 1; text-align: left; }
+  .contact-name { display: block; font-weight: 600; color: var(--gray-800); }
+  .contact-number { display: block; font-size: 0.9rem; color: var(--gray-500); font-family: monospace; }
+  .call-icon { color: var(--success-500); }
+  .connecting-animation { margin: 2rem 0; }
+  .pulse { animation: pulse 1.5s ease-in-out infinite; color: var(--primary-500); }
+  @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.1); opacity: 0.8; } }
+  .call-active { width: 100px; height: 100px; border-radius: 50%; background: var(--success-100); display: inline-flex; align-items: center; justify-content: center; margin: 1rem 0; color: var(--success-600); }
+  .call-timer { font-size: 2rem; font-weight: 600; color: var(--gray-700); font-family: monospace; }
+  .call-controls { margin-top: 1.5rem; }
+`
+
+const surveyStyles = `
+  .survey-modal { max-width: 500px; width: 90%; }
+  .survey-header { text-align: center; margin-bottom: 1.5rem; }
+  .survey-header h2 { margin-top: 1rem; }
+  .rating-options { display: flex; justify-content: center; gap: 1.5rem; margin-bottom: 1.5rem; }
+  .rating-btn { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; padding: 1.5rem; background: var(--gray-50); border: 2px solid var(--gray-200); border-radius: var(--radius-xl); cursor: pointer; transition: all 0.2s; min-width: 100px; }
+  .rating-btn:hover { border-color: var(--rating-color); background: white; }
+  .rating-btn.selected { border-color: var(--rating-color); background: white; box-shadow: 0 0 0 3px rgba(0,0,0,0.05); }
+  .rating-btn.selected svg { color: var(--rating-color); }
+  .rating-btn span { font-weight: 500; color: var(--gray-600); }
+  .feedback-section { margin-bottom: 1.5rem; }
+  .feedback-section label { display: block; margin-bottom: 0.5rem; font-weight: 500; color: var(--gray-700); }
+  .feedback-section textarea { width: 100%; padding: 0.75rem; border: 1px solid var(--gray-200); border-radius: var(--radius-lg); font-family: inherit; resize: none; }
+  .feedback-section textarea:focus { outline: none; border-color: var(--primary-500); }
+  .survey-actions { display: flex; gap: 1rem; justify-content: flex-end; }
+`
+
+const adminStyles = `
+  .admin-screen { background: var(--gray-100); }
+  .admin-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 2rem; background: white; box-shadow: var(--shadow-sm); }
+  .admin-header h1 { display: flex; align-items: center; gap: 0.75rem; font-size: 1.5rem; color: var(--gray-800); }
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+  .stat-card { padding: 1.5rem; text-align: center; border-left: 4px solid var(--stat-color); }
+  .stat-value { font-size: 2.5rem; font-weight: 700; color: var(--gray-800); margin: 0.5rem 0; }
+  .stat-label { color: var(--gray-500); font-weight: 500; }
+  .kiosk-table-section { background: white; border-radius: var(--radius-xl); padding: 1.5rem; box-shadow: var(--shadow-sm); }
+  .kiosk-table-section h3 { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 1rem; color: var(--gray-700); }
+  .kiosk-table { width: 100%; border-collapse: collapse; }
+  .kiosk-table th, .kiosk-table td { padding: 1rem; text-align: left; border-bottom: 1px solid var(--gray-100); }
+  .kiosk-table th { background: var(--gray-50); font-weight: 600; color: var(--gray-600); font-size: 0.85rem; text-transform: uppercase; }
+  .kiosk-id { font-family: monospace; font-weight: 600; color: var(--primary-600); }
+  .status-badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.35rem 0.75rem; border-radius: 2rem; font-size: 0.85rem; font-weight: 500; text-transform: capitalize; }
+  .status-badge.online { background: var(--success-100); color: var(--success-700); }
+  .status-badge.offline { background: var(--danger-100); color: var(--danger-700); }
+  .action-btns { display: flex; gap: 0.5rem; }
+  .btn-icon { width: 32px; height: 32px; border-radius: var(--radius-md); border: 1px solid var(--gray-200); background: white; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--gray-500); transition: all 0.2s; }
+  .btn-icon:hover { background: var(--primary-50); color: var(--primary-600); border-color: var(--primary-300); }
 `
 
 // Global screen styles
