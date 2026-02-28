@@ -1,0 +1,7 @@
+{
+  "name": "SUVIDHA - Smart Urban Digital Helpdesk",
+  "description": "A public-facing, touch-based kiosk interface for civic utility services with voice-assisted navigation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
