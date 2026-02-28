@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Devanagari:wght@400;500;700;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-hindi: "Noto Sans Devanagari", serif;
+  
+  --color-saffron: #FF9933;
+  --color-india-green: #138808;
+  --color-chakra-blue: #000080;
+}
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 overflow-hidden select-none;
+    font-family: var(--font-sans);
+  }
+
+  .font-hindi {
+    font-family: var(--font-hindi);
+  }
+}
+
+@layer components {
+  .kiosk-button {
+    @apply active:scale-95 transition-all duration-200 touch-manipulation;
+  }
+  
+  .glass-card {
+    @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-xl;
+  }
+}
+

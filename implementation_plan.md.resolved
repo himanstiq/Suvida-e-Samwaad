@@ -1,0 +1,61 @@
+Design and develop a voice-operated, touch-based kiosk interface for civic utility services using **Material 3 Expressive** design aesthetics.
+
+## Design Philosophy (Material 3 Expressive)
+- **Vibrant & Dynamic**: Use high-contrast colors and large shapes to guide attention.
+- **Expressive Typography**: Use bold, large display fonts for clear readability on kiosks.
+- **Natural Interaction**: Fluid animations and touch-first hit targets (minimum 64px).
+- **Surface & Elevation**: Use containment to group related services.
+
+## User Review Required
+
+> [!IMPORTANT]
+> **API Selection:** For the "agent" feel and multilingual accuracy (especially Indian languages), I propose using **OpenAI (Realtime/Whisper)** for speech-to-text and **ElevenLabs** for text-to-speech. Please confirm if you have API keys for these or prefer an open-source local alternative (e.g., HuggingFace Transformers).
+
+> [!NOTE]
+> **Multilingual Strategy:** We will support English and Hindi initially, scalable to other regional languages. UI will be managed via `i18next`.
+
+## Proposed Changes
+
+### Core Infrastructure & Architecture
+- **State Management:** Use a central `KioskContext` for navigation and session.
+- **Voice Agent Hook:** `useVoiceAgent` for assistant logic.
+- **Theme Definition:** Configure Tailwind v4 with M3 color tokens (Primary, Secondary, Tertiary, Surface).
+
+---
+
+### UI Components (Material 3 Expressive)
+
+#### [NEW] [M3Button.tsx](file:///e:/lmaoded/src/components/M3Button.tsx)
+Large, rounded buttons (up to `rounded-full`) with expressive hover/tap states.
+
+#### [NEW] [M3Surface.tsx](file:///e:/lmaoded/src/components/M3Surface.tsx)
+Elevated containers for different service modules.
+
+#### [NEW] [KioskLayout.tsx](file:///e:/lmaoded/src/components/KioskLayout.tsx)
+Single-viewport wrapper with Material-inspired background gradients.
+
+---
+
+### Features
+
+#### Multilingual Support
+- Integrate `react-i18next`.
+- Create translation files for English and Hindi.
+
+#### Voice Guidance
+- Implement a "Guided Step" system where the agent announces the current screen and asks for specific user input.
+- Example: "Welcome to SUVIDHA. Please select a department or say 'Electricity' to proceed."
+
+---
+
+## Verification Plan
+
+### Automated Tests
+- No existing tests found. I will suggest basic component tests later if needed.
+- For now, verification will be manual within the kiosk environment.
+
+### Manual Verification
+1. **Viewport Test:** Zoom in/out to ensure no scrollbars appear and layout remains responsive to a large touch screen.
+2. **Navigation Flow:** Test both touch and voice commands to navigate from Home -> Department -> Service Request.
+3. **Multilingual Toggle:** Switch languages and verify that both UI text and Voice Agent change accordingly.
+4. **Offline Fallback:** (If implemented) Verify that basic navigation works even if rich AI APIs are slow/unavailable.

@@ -1,0 +1,22 @@
+# Task: SUVIDHA Kiosk Frontend
+
+- [ ] Project Setup & Research [/]
+    - [x] Explore existing codebase
+    - [x] Research voice implementation efficiency (API vs Local)
+    - [x] Design Kiosk Navigation & State Management
+- [ ] Planning [/]
+    - [x] Create initial implementation plan
+    - [x] Define Multilingual & Authentication strategy
+- [ ] Design System Implementation [/]
+    - [x] Initial M3 Expressive setup
+    - [ ] Integrate SUVIDHA specialized theme (Saffron, India Green, Mandala) [/]
+    - [ ] Add specific fonts (Rozha One, Noto Sans Devanagari)
+- [ ] Feature Implementation [/]
+    - [ ] Specialized Idle Welcome Page (Hindi/English) [/]
+    - [ ] Kiosk Header & Footer with Govt. Branding [/]
+    - [ ] Voice Agent Hybrid Integration
+    - [ ] Department Selection Shell
+- [ ] Verification & Testing
+    - [ ] Test on Single Viewport (Kiosk simulation)
+    - [ ] Verify Multilingual support
+    - [ ] Test Voice commands and Agent responses
